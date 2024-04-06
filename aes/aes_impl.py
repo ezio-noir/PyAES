@@ -236,9 +236,8 @@ def decrypt_block(block: bytearray, key: bytearray, Nk=4, Nr=10) -> bytearray:
 
 
 def xor_blocks(a: bytearray, b: bytearray) -> bytearray:
-    assert len(a) == BLOCK_SIZE and len(b) == BLOCK_SIZE, f'Blocks length must be {BLOCK_SIZE}.'
-    res = bytearray(BLOCK_SIZE)
-    for i in range(BLOCK_SIZE):
+    res = bytearray(min(len(a), len(b)))
+    for i in range(len(res)):
         res[i] = a[i] ^ b[i]
     return res
 
@@ -297,6 +296,80 @@ def encrypt_cbc(msg: bytearray, key: bytearray, iv: bytearray, mode=128) -> byte
     return res    
 
 
+def encrypt_cfb(msg: bytearray, key: bytearray, iv: bytearray, mode=128) -> bytearray:
+    assert len(iv) == BLOCK_SIZE, f'Initialization vector size must be {BLOCK_SIZE}.'
+
+    xpd_key = expand_key(key)
+    num_blocks = ((len(msg) - 1) // 16) + 1
+    res = bytearray()
+
+    (Nk, Nr) = (4, 10)
+    if mode == 192:
+        (Nk, Nr) = (6, 12)
+    elif mode == 256:
+        (Nk, Nr) = (8, 14)
+
+    to_enc = convert_to_block(iv.copy(), (4, Nb))
+    for n in range(num_blocks):
+        enc_block = encrypt_block(to_enc, xpd_key, Nk, Nr)
+        xored_enc = xor_blocks(flatten(enc_block), msg[n*16:(n+1)*16])
+        res += xored_enc
+        if len(xored_enc) == BLOCK_SIZE:
+            to_enc = convert_to_block(xored_enc, (4, Nb))
+
+    assert len(res) == len(msg), 'Encrypted message length does not match desired length.'
+
+    return res
+
+
+def encrypt_ofb(msg: bytearray, key: bytearray, iv: bytearray, mode=128) -> bytearray:
+    assert len(iv) == BLOCK_SIZE, f'Initialization vector size must be {BLOCK_SIZE}.'
+
+    xpd_key = expand_key(key)
+    num_blocks = ((len(msg) - 1) // 16) + 1
+    res = bytearray()
+
+    (Nk, Nr) = (4, 10)
+    if mode == 192:
+        (Nk, Nr) = (6, 12)
+    elif mode == 256:
+        (Nk, Nr) = (8, 14)
+
+    to_enc = convert_to_block(iv.copy(), (4, Nb))
+    for n in range(num_blocks):
+        to_enc = encrypt_block(to_enc, xpd_key, Nk, Nr)
+        res += xor_blocks(flatten(to_enc), msg[n*16:(n+1)*16])
+
+    assert len(res) == len(msg), 'Encrypted message length does not match desired length.'
+
+    return res
+
+
+def encrypt_ctr(msg: bytearray, key: bytearray, iv: bytearray, mode=128) -> bytearray:
+    assert len(iv) == BLOCK_SIZE, f'Initialization vector size must be {BLOCK_SIZE}.'
+
+    xpd_key = expand_key(key)
+    num_blocks = ((len(msg) - 1) // 16) + 1
+    res = bytearray()
+
+    (Nk, Nr) = (4, 10)
+    if mode == 192:
+        (Nk, Nr) = (6, 12)
+    elif mode == 256:
+        (Nk, Nr) = (8, 14)
+
+    to_enc = convert_to_block(iv.copy(), (4, Nb))
+    for n in range(num_blocks):
+        enc_block = encrypt_block(to_enc, xpd_key, Nk, Nr)
+        encrypted = flatten(enc_block)
+        res += xor_blocks(encrypted, msg[n*16:(n+1)*16])
+        to_enc = convert_to_block(add_1(encrypted), (4, Nb))
+
+    assert len(res) == len(msg), 'Encrypted message length does not match desired length.'
+
+    return res
+
+
 def decrypt_ecb(ct: bytearray, key: bytearray, mode=128) -> bytearray:
     assert len(ct) % 16 == 0, f'Input length must be divided by 16.'
     blocks = convert_to_blocks(ct, (4, Nb), pad=False)
@@ -337,6 +410,71 @@ def decrypt_cbc(ct: bytearray, key: bytearray, iv: bytearray, mode=128) -> bytea
         decoded = flatten(dec_block)
         res += xor_blocks(decoded, to_xor)
         to_xor = slice
+
+    return res
+
+
+def decrypt_cfb(ct: bytearray, key: bytearray, iv: bytearray, mode=128) -> bytearray:
+    assert len(iv) == BLOCK_SIZE, f'Initialization vector length must be {BLOCK_SIZE}.'
+    xpd_key = expand_key(key)
+    num_blocks = ((len(ct) - 1) // 16) + 1
+    res = bytearray()
+
+    (Nk, Nr) = (4, 10)
+    if mode == 192:
+        (Nk, Nr) = (6, 12)
+    elif mode == 256:
+        (Nk, Nr) = (8, 14)
+
+    to_enc = convert_to_block(iv.copy(), (4, Nb))
+    for n in range(num_blocks):
+        enc_block = encrypt_block(to_enc, xpd_key, Nk, Nr)
+        slice = ct[n*16:(n+1)*16]
+        res += xor_blocks(flatten(enc_block), slice)
+        if len(slice) == BLOCK_SIZE:
+            to_enc = convert_to_block(slice, (4, Nb))
+
+    return res
+
+
+def decrypt_ofb(ct: bytearray, key: bytearray, iv: bytearray, mode=128) -> bytearray:
+    assert len(iv) == BLOCK_SIZE, f'Initialization vector length must be {BLOCK_SIZE}.'
+    xpd_key = expand_key(key)
+    num_blocks = ((len(ct) - 1) // 16) + 1
+    res = bytearray()
+
+    (Nk, Nr) = (4, 10)
+    if mode == 192:
+        (Nk, Nr) = (6, 12)
+    elif mode == 256:
+        (Nk, Nr) = (8, 14)
+
+    to_enc = convert_to_block(iv.copy(), (4, Nb))
+    for n in range(num_blocks):
+        to_enc = encrypt_block(to_enc, xpd_key, Nk, Nr)
+        res += xor_blocks(flatten(to_enc), ct[n*16:(n+1)*16])
+
+    return res
+
+
+def decrypt_ctr(ct: bytearray, key: bytearray, iv: bytearray, mode=128) -> bytearray:
+    assert len(iv) == BLOCK_SIZE, f'Initialization vector length must be {BLOCK_SIZE}.'
+    xpd_key = expand_key(key)
+    num_blocks = ((len(ct) - 1) // 16) + 1
+    res = bytearray()
+
+    (Nk, Nr) = (4, 10)
+    if mode == 192:
+        (Nk, Nr) = (6, 12)
+    elif mode == 256:
+        (Nk, Nr) = (8, 14)
+
+    to_enc = convert_to_block(iv.copy(), (4, Nb))
+    for n in range(num_blocks):
+        enc_block = encrypt_block(to_enc, xpd_key, Nk, Nr)
+        encrypted = flatten(enc_block)
+        res += xor_blocks(encrypted, ct[n*16:(n+1)*16])
+        to_enc = convert_to_block(add_1(encrypted), (4, Nb))
 
     return res
 

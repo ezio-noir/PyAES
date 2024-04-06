@@ -20,7 +20,7 @@ def main():
 
     parser.add_argument('command', choices=['encrypt', 'decrypt'])
     parser.add_argument('-l', '--key-length', type=int, choices=[128, 192, 256], default=128, help='Key length in bits')
-    parser.add_argument('-m', '--mode', choices=['ecb', 'cbc'], default='ecb', help='Mode of operation')
+    parser.add_argument('-m', '--mode', choices=['ecb', 'cbc', 'cfb', 'ofb', 'ctr'], default='ecb', help='Mode of operation')
     parser.add_argument('-o', '--output')
     parser.add_argument('-p', '--print', choices=['raw', 'pretty'], default='raw', help='Print format')
 
@@ -50,7 +50,7 @@ def main():
 
     # Get iv (if needed)
     iv = None
-    if opts.mode == 'cbc':
+    if opts.mode != 'ecb':
         if opts.init_vec:
             iv = bytearray.fromhex(opts.init_vec)
         elif opts.init_vec_file:
@@ -58,6 +58,7 @@ def main():
                 iv = bytearray.fromhex(f.read())
         else:
             iv = bytearray(os.urandom(BLOCK_SIZE))
+
 
     # Initialize cipher
     cipher = AES(key, opts.key_length)
@@ -72,10 +73,10 @@ def main():
                 msg = bytearray.fromhex(f.read())
 
         # Encrypt
-        if opts.mode == 'ecb':
-            res = cipher.encrypt(msg)
-        elif opts.mode =='cbc':
-            res = cipher.encrypt(msg, 'cbc', iv=iv)
+        if iv:
+            res = cipher.encrypt(msg, opts.mode, iv=iv)
+        else:
+            res = cipher.encrypt(msg, opts.mode)
 
     elif opts.command == 'decrypt':
         # Read ciphertext        
@@ -87,10 +88,10 @@ def main():
                 ct = bytearray.fromhex(f.read())
 
         # Decrypt
-        if opts.mode == 'ecb':
-            res = cipher.decrypt(ct)
-        elif opts.mode == 'cbc':
-            res = cipher.decrypt(ct, 'cbc', iv=bytearray.fromhex(opts.init_vec))
+        if iv:
+            res = cipher.decrypt(ct, opts.mode, iv=iv)
+        else:
+            res = cipher.decrypt(ct, opts.mode)
 
     if opts.print == 'raw':
         print('key =', key.hex())
@@ -111,6 +112,7 @@ def main():
             dump_hex(res)
         else:
             print(res)
+
 
 if __name__ == '__main__':
     main()
