@@ -13,7 +13,7 @@ class AES:
         elif mode == 'cbc':
             iv = kwargs.get('iv')
             assert iv, 'Missing initialization vector.'                
-            return iv + aes_impl.encrypt_cbc(msg, self.key, iv)
+            return aes_impl.encrypt_cbc(msg, self.key, iv)
         
 
     def decrypt(self, ct: bytearray, mode='ecb', **kwargs) -> bytearray:

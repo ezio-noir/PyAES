@@ -1,9 +1,17 @@
 from aes.aes import AES
+from aes.aes_impl import BLOCK_SIZE
 from argparse import ArgumentParser
+import os
 
 
-def dump_hex(s: bytearray):
-    print(' '.join('{:02x}'.format(byte) for byte in s))
+def dump_hex(s: bytearray, cols=8, bytes_per_group=4):
+    for i in range(len(s)):
+        print('{:02x}'.format(s[i]), end='')
+        if (i + 1) % bytes_per_group == 0:
+            print(' ', end='')
+        if (i + 1) % (bytes_per_group * cols) == 0:
+            print('')
+    print('')
 
 
 def main():
@@ -11,48 +19,63 @@ def main():
     parser = ArgumentParser()
 
     parser.add_argument('command', choices=['encrypt', 'decrypt'])
-    parser.add_argument('-l', '--key-length', type=int, choices=[128, 192, 256], default=128)
-    parser.add_argument('-m', '--mode', choices=['ecb', 'cbc'], default='ecb')
+    parser.add_argument('-l', '--key-length', type=int, choices=[128, 192, 256], default=128, help='Key length in bits')
+    parser.add_argument('-m', '--mode', choices=['ecb', 'cbc'], default='ecb', help='Mode of operation')
     parser.add_argument('-o', '--output')
-    parser.add_argument('-iv', '--initialization-vector')
+    parser.add_argument('-p', '--print', choices=['raw', 'pretty'], default='raw', help='Print format')
 
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('-i', '--input')
-    input_group.add_argument('-f', '--file')
+    input_group.add_argument('-if', '--input-file')
 
-    key_group = parser.add_mutually_exclusive_group(required=True)
-    key_group.add_argument('-ks', '--key-string')
+    key_group = parser.add_mutually_exclusive_group()
+    key_group.add_argument('-k', '--key')
     key_group.add_argument('-kf', '--key-file')
+
+    iv_group = parser.add_mutually_exclusive_group()
+    iv_group.add_argument('-iv', '--init-vec', help='Initialization vector')
+    iv_group.add_argument('-ivf', '--init-vec-file')
 
     opts = parser.parse_args()
 
-    # Generate key from secret
-    secret = bytearray()
-    if opts.key_string:
-        secret = bytearray.fromhex(opts.key_string)
+    # Get key
+    key = bytearray()
+    if opts.key:
+        key = bytearray.fromhex(opts.key)
     elif opts.key_file:
         with open(opts.key_file, 'r') as f:
-            secret = bytearray.fromhex(f.read())
+            key = bytearray.fromhex(f.read())
+    else:
+        key = bytearray(os.urandom(opts.key_length))
+
+    # Get iv (if needed)
+    iv = None
+    if opts.mode == 'cbc':
+        if opts.init_vec:
+            iv = bytearray.fromhex(opts.init_vec)
+        elif opts.init_vec_file:
+            with open(opts.init_vec_file, 'r') as f:
+                iv = bytearray.fromhex(f.read())
+        else:
+            iv = bytearray(os.urandom(BLOCK_SIZE))
 
     # Initialize cipher
-    cipher = AES(secret, opts.key_length)
+    cipher = AES(key, opts.key_length)
 
     if opts.command == 'encrypt':
         # Read message
         msg = bytearray()
         if opts.input:
             msg = bytearray.fromhex(opts.input)
-        elif opts.file:
-            with open(opts.file, 'r') as f:
+        elif opts.input_file:
+            with open(opts.input_file, 'r') as f:
                 msg = bytearray.fromhex(f.read())
 
         # Encrypt
         if opts.mode == 'ecb':
-            ct = cipher.encrypt(msg)
-            dump_hex(ct)
+            res = cipher.encrypt(msg)
         elif opts.mode =='cbc':
-            ct = cipher.encrypt(msg, 'cbc', iv=bytearray.fromhex(opts.initialization_vector))
-            dump_hex(ct)
+            res = cipher.encrypt(msg, 'cbc', iv=iv)
 
     elif opts.command == 'decrypt':
         # Read ciphertext        
@@ -65,20 +88,29 @@ def main():
 
         # Decrypt
         if opts.mode == 'ecb':
-            pt = cipher.decrypt(ct)
-            dump_hex(pt)
-            print(pt)
+            res = cipher.decrypt(ct)
         elif opts.mode == 'cbc':
-            pt = cipher.decrypt(ct, 'cbc', iv=bytearray.fromhex(opts.initialization_vector))
-            print(pt)
+            res = cipher.decrypt(ct, 'cbc', iv=bytearray.fromhex(opts.init_vec))
 
+    if opts.print == 'raw':
+        print('key =', key.hex())
+        if iv:
+            print('iv =', iv.hex())
+        if opts.command == 'encrypt':
+            print('res =', res.hex())
+        else:
+            print('res =', res)
+    elif opts.print == 'pretty':
+        print('key =')
+        dump_hex(key)
+        if iv:
+            print('iv =')
+            dump_hex(iv)
+        print('res =')
+        if opts.command == 'encrypt':
+            dump_hex(res)
+        else:
+            print(res)
 
 if __name__ == '__main__':
     main()
-
-
-# testmsg: abababababababababababababababab
-# testkey: a1b2c3d4e5f611335577990022446688
-# testiv: ffddbbaaccee12345678901f2e3d4d5c
-
-# CBC output: ffddbbaaccee12345678901f2e3d4d5c 304d171df3c020dda1596167426ac41556273865a65236f800a85a975bb4df77
