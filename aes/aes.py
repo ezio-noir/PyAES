@@ -1,10 +1,9 @@
-import aes_impl
+from . import aes_impl
 
-from aes_impl import gen_key
 
 class AES:
-    def __init__(self, secret, key_length=128):
-        self.key = gen_key(secret, key_length)
+    def __init__(self, key, key_length=128):
+        self.key = key
         self.key_length = key_length
 
 
@@ -23,4 +22,4 @@ class AES:
         elif mode == 'cbc':
             iv = kwargs.get('iv')
             assert iv, 'Missing initialization vector.'                
-            return aes_impl.encrypt_cbc(ct[16:], self.key, iv)
+            return aes_impl.decrypt_cbc(ct, self.key, iv)

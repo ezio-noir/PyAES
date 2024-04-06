@@ -1,4 +1,4 @@
-from aes import AES
+from aes.aes import AES
 from argparse import ArgumentParser
 
 
@@ -29,10 +29,10 @@ def main():
     # Generate key from secret
     secret = bytearray()
     if opts.key_string:
-        secret = bytearray(opts.key_string.encode())
+        secret = bytearray.fromhex(opts.key_string)
     elif opts.key_file:
-        with open(opts.key_file, 'rb') as f:
-            secret = bytearray(f.read())
+        with open(opts.key_file, 'r') as f:
+            secret = bytearray.fromhex(f.read())
 
     # Initialize cipher
     cipher = AES(secret, opts.key_length)
@@ -41,10 +41,10 @@ def main():
         # Read message
         msg = bytearray()
         if opts.input:
-            msg = bytearray(opts.input.encode())
+            msg = bytearray.fromhex(opts.input)
         elif opts.file:
-            with open(opts.file, 'rb') as f:
-                msg = bytearray(f.read())
+            with open(opts.file, 'r') as f:
+                msg = bytearray.fromhex(f.read())
 
         # Encrypt
         if opts.mode == 'ecb':
@@ -72,9 +72,13 @@ def main():
             pt = cipher.decrypt(ct, 'cbc', iv=bytearray.fromhex(opts.initialization_vector))
             print(pt)
 
+
 if __name__ == '__main__':
     main()
 
-# 5a55a3434dc93ce26e8f206009303851
-# abababababababababababababababab
-# abababababababababababababababab79f70acde97758701af7ca8cf80d01f
+
+# testmsg: abababababababababababababababab
+# testkey: a1b2c3d4e5f611335577990022446688
+# testiv: ffddbbaaccee12345678901f2e3d4d5c
+
+# CBC output: ffddbbaaccee12345678901f2e3d4d5c 304d171df3c020dda1596167426ac41556273865a65236f800a85a975bb4df77
