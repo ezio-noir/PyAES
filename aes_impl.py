@@ -42,6 +42,12 @@ INV_SBOX = bytearray([
 Rcon = bytearray([0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36])
 
 
+# ----------------------------------------------------------------
+# |                                                              |
+# |                         DANGER ZONE                          |
+# |                                                              |
+# ----------------------------------------------------------------
+
 def add_round_key(state: bytearray, key: bytearray) -> bytearray:
     assert len(state) == BLOCK_SIZE and len(key) == BLOCK_SIZE, f'State and key length must be {BLOCK_SIZE}.'
     res = bytearray(BLOCK_SIZE)
@@ -145,7 +151,7 @@ def rot_word(word: bytearray) -> bytearray:
     return res
 
 
-def xor_word(a: bytearray, b: bytearray) -> bytearray:
+def xor_words(a: bytearray, b: bytearray) -> bytearray:
     assert len(a) == 4 and len(b) == 4, 'Words length must be 4.'
     res = bytearray(4)
     for i in range(4):
@@ -202,10 +208,10 @@ def expand_key(key: bytearray, Nk=4, Nr=10) -> bytearray:
         tmp = xpd_key[i - 1]
         if i % Nk == 0:
             rcon = bytearray([Rcon[i // Nk], 0x00, 0x00, 0x00])
-            tmp = xor_word(sub_word(rot_word(tmp)), rcon)
+            tmp = xor_words(sub_word(rot_word(tmp)), rcon)
         elif Nk > 6 and i % Nk == 4:
             tmp = sub_word(tmp)
-        xpd_key[i] = xor_word(xpd_key[i - Nk], tmp)
+        xpd_key[i] = xor_words(xpd_key[i - Nk], tmp)
 
     res = bytearray(4 * 4 * (Nr + 1))
     for i in range(len(xpd_key)):
@@ -216,7 +222,7 @@ def expand_key(key: bytearray, Nk=4, Nr=10) -> bytearray:
 
 
 def encrypt_block(block: bytearray, key: bytearray, Nk=4, Nr=10) -> bytearray:
-    assert len(block) == BLOCK_SIZE and len(key) == BLOCK_SIZE, f'Block and key length must be {BLOCK_SIZE}.'
+    assert len(block) == BLOCK_SIZE, f'Block length must be {BLOCK_SIZE}.'
     state = block.copy()
 
     state = add_round_key(state, key[:BLOCK_SIZE])
@@ -253,6 +259,20 @@ def decrypt_block(block: bytearray, key: bytearray, Nk=4, Nr=10) -> bytearray:
     return flatten(state)
 
 
+def xor_blocks(a: bytearray, b: bytearray) -> bytearray:
+    assert len(a) == BLOCK_SIZE and len(b) == BLOCK_SIZE, f'Blocks length must be {BLOCK_SIZE}.'
+    res = bytearray(BLOCK_SIZE)
+    for i in range(BLOCK_SIZE):
+        res[i] = a[i] ^ b[i]
+    return res
+
+
+# ----------------------------------------------------------------
+# |                                                              |
+# |                      MODES OF OPERATION                      |
+# |                                                              |
+# ----------------------------------------------------------------
+
 def encrypt_ecb(msg: bytearray, key: bytearray, mode=128) -> bytearray:
     padded_msg = pad(msg)
     xpd_key = expand_key(key)
@@ -275,6 +295,32 @@ def encrypt_ecb(msg: bytearray, key: bytearray, mode=128) -> bytearray:
     return res
 
 
+def encrypt_cbc(msg: bytearray, key: bytearray, iv: bytearray, mode=128) -> bytearray:
+    assert len(iv) == BLOCK_SIZE, f'Initialization vector size must be {BLOCK_SIZE}.'
+
+    padded_msg = pad(msg)
+    xpd_key = expand_key(key)
+    num_blocks = len(padded_msg) // 16
+    res = bytearray()
+
+    (Nk, Nr) = (4, 10)
+    if mode == 192:
+        (Nk, Nr) = (6, 12)
+    elif mode == 256:
+        (Nk, Nr) = (8, 14)
+
+    to_xor = iv.copy()
+    for n in range(num_blocks):
+        block = make_block(xor_blocks(padded_msg[n*16:(n+1)*16], to_xor))
+        enc_block = encrypt_block(block, xpd_key, Nk, Nr)
+        res += enc_block
+        to_xor = enc_block
+
+    assert len(res) == len(padded_msg), 'Encrypted message length does not match desired length.'
+
+    return res    
+
+
 def decrypt_ecb(ct: bytearray, key: bytearray, mode=128) -> bytearray:
     assert len(ct) % 16 == 0, f'Input length must be divided by 16.'
     xpd_key = expand_key(key)
@@ -291,6 +337,29 @@ def decrypt_ecb(ct: bytearray, key: bytearray, mode=128) -> bytearray:
         block = make_block(ct[n*16:(n+1)*16])
         dec_block = decrypt_block(block, xpd_key, Nk, Nr)
         res += dec_block
+
+    return res
+
+    
+def decrypt_cbc(ct: bytearray, key: bytearray, iv: bytearray, mode=128) -> bytearray:
+    assert len(ct) % 16 == 0, f'Input length must be divided by 16.'
+    assert len(iv) == 0, f'Initialization vector length must be {BLOCK_SIZE}.'
+    xpd_key = expand_key(key)
+    num_blocks = len(ct) // 16
+    res = bytearray()
+
+    (Nk, Nr) = (4, 10)
+    if mode == 192:
+        (Nk, Nr) = (6, 12)
+    elif mode == 256:
+        (Nk, Nr) = (8, 14)
+
+    to_xor = iv.copy()
+    for n in range(num_blocks):
+        block = make_block(ct[n*16:(n+1)*16])
+        dec_block = decrypt_block(block, xpd_key, Nk, Nr)
+        res += xor_blocks(dec_block, to_xor)
+        to_xor = ct[n*16:(n+1)*16]
 
     return res
 

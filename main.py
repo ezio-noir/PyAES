@@ -14,6 +14,7 @@ def main():
     parser.add_argument('-l', '--key-length', type=int, choices=[128, 192, 256], default=128)
     parser.add_argument('-m', '--mode', choices=['ecb', 'cbc'], default='ecb')
     parser.add_argument('-o', '--output')
+    parser.add_argument('-iv', '--initialization-vector')
 
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('-i', '--input')
@@ -49,6 +50,9 @@ def main():
         if opts.mode == 'ecb':
             ct = cipher.encrypt(msg)
             dump_hex(ct)
+        elif opts.mode =='cbc':
+            ct = cipher.encrypt(msg, 'cbc', iv=bytearray.fromhex(opts.initialization_vector))
+            dump_hex(ct)
 
     elif opts.command == 'decrypt':
         # Read ciphertext        
@@ -64,8 +68,13 @@ def main():
             pt = cipher.decrypt(ct)
             dump_hex(pt)
             print(pt)
+        elif opts.mode == 'cbc':
+            pt = cipher.decrypt(ct, 'cbc', iv=bytearray.fromhex(opts.initialization_vector))
+            print(pt)
 
 if __name__ == '__main__':
     main()
 
 # 5a55a3434dc93ce26e8f206009303851
+# abababababababababababababababab
+# abababababababababababababababab79f70acde97758701af7ca8cf80d01f
