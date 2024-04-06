@@ -36,3 +36,10 @@
     ```bash
     $ python3 main.py decrypt -if './message.txt' -k 'a1b2c3d4e5f611335577990022446688' -iv 'ffddbbaaccee12345678901f2e3d4d5c' -m ctr
     ```
+
+## References
+- [AES spec](https://nvlpubs.nist.gov/nistpubs/fips/nist.fips.197.pdf)
+- [Modes of operation](https://www.highgo.ca/2019/08/08/the-difference-in-five-modes-in-the-aes-encryption-algorithm/)
+- [Modes of operation](https://www.researchgate.net/figure/OFB-Mode-Encryption-Decryption_fig3_268347953)
+- [Code](https://github.com/adrgs/rust-aes)
+- [Code](https://github.com/kokke/tiny-AES-c)
